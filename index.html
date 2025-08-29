@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Secure Web Messenger</title>
+    <title>Bluetooth Web Messenger</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         .chat-bubble-sent {
             border-radius: 1.125rem 1.125rem 0 1.125rem;
@@ -17,32 +15,32 @@
             border-radius: 1.125rem 1.125rem 1.125rem 0;
             max-width: 66.666667%;
         }
-        #video-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            z-index: 50;
-            display: none;
+        #bluetooth-devices {
+            max-height: 200px;
+            overflow-y: auto;
         }
-        #video-element {
-            width: 100%;
-            max-width: 500px;
-            margin: 2rem auto;
-            display: block;
+        .bluetooth-device {
+            cursor: pointer;
+            transition: background-color 0.2s;
         }
-        #qr-canvas {
-            display: none;
+        .bluetooth-device:hover {
+            background-color: #f3f4f6;
         }
-        .qr-code-container {
-            display: flex;
-            justify-content: center;
-            padding: 1rem;
-            background: white;
-            border-radius: 0.5rem;
-            margin-top: 1rem;
+        .connection-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .connected {
+            background-color: #10B981;
+        }
+        .disconnected {
+            background-color: #EF4444;
+        }
+        .connecting {
+            background-color: #F59E0B;
         }
     </style>
 </head>
@@ -50,7 +48,7 @@
     <div id="app" class="container mx-auto px-4 py-8">
         <!-- Auth Section -->
         <div id="auth-section" class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
-            <h1 class="text-2xl font-bold text-center mb-6">Secure Messenger</h1>
+            <h1 class="text-2xl font-bold text-center mb-6">Bluetooth Messenger</h1>
             <div id="login-form">
                 <h2 class="text-xl font-semibold mb-4">Login</h2>
                 <div class="mb-4">
@@ -89,32 +87,36 @@
 
         <!-- Main App Section -->
         <div id="main-section" class="hidden max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden">
-            <!-- Peer Setup -->
-            <div id="peer-setup" class="p-6 border-b">
-                <h2 class="text-xl font-semibold mb-4">Peer Setup</h2>
+            <!-- Bluetooth Setup -->
+            <div id="bluetooth-setup" class="p-6 border-b">
+                <h2 class="text-xl font-semibold mb-4">Bluetooth Connection</h2>
                 <div class="flex flex-wrap items-center mb-4">
-                    <div class="w-full md:w-1/2 mb-4 md:mb-0">
-                        <label class="block text-gray-700 text-sm font-bold mb-2" for="peer-id">Your Peer ID</label>
-                        <div class="flex">
-                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="peer-id" type="text" placeholder="Enter a unique ID">
-                            <button class="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="set-peer">Set ID</button>
-                        </div>
-                    </div>
-                    <div class="w-full md:w-1/2 md:pl-4">
+                    <div class="w-full mb-4">
                         <div class="flex space-x-2">
-                            <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" id="generate-qr">Generate QR</button>
-                            <button class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded" id="scan-qr">Scan QR</button>
+                            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="scan-bluetooth">Scan for Devices</button>
+                            <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" id="make-discoverable">Make Discoverable</button>
                         </div>
                     </div>
                 </div>
-                <div id="qr-code" class="hidden mt-4 qr-code-container"></div>
+                <div class="mb-4">
+                    <h3 class="font-medium mb-2">Available Devices:</h3>
+                    <div id="bluetooth-devices" class="border rounded p-2">
+                        <p class="text-gray-500 text-center py-4">No devices found. Click "Scan for Devices" to search.</p>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <h3 class="font-medium mb-2">Connected Devices:</h3>
+                    <div id="connected-devices" class="border rounded p-2">
+                        <p class="text-gray-500 text-center py-4">No devices connected.</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Chat Section -->
             <div class="flex flex-col h-96">
                 <!-- Chat Header -->
                 <div class="bg-gray-200 px-4 py-2 flex justify-between items-center">
-                    <h3 class="font-semibold">Group Chat</h3>
+                    <h3 class="font-semibold">Bluetooth Chat</h3>
                     <span id="connection-status" class="bg-red-500 text-white px-2 py-1 rounded-full text-xs">Disconnected</span>
                 </div>
 
@@ -136,24 +138,17 @@
         </div>
     </div>
 
-    <!-- QR Scanner -->
-    <div id="video-container">
-        <video id="video-element"></video>
-        <canvas id="qr-canvas" class="hidden"></canvas>
-        <div class="text-center mt-4">
-            <button id="close-scanner" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Close Scanner</button>
-        </div>
-    </div>
-
     <script>
         // App State
         const appState = {
             currentUser: null,
-            peerId: null,
-            connections: {},
-            dataChannel: null,
-            connectedPeers: new Set(),
-            encryptionKey: null
+            bluetoothServer: null,
+            bluetoothCharacteristic: null,
+            connectedDevices: new Map(),
+            encryptionKey: null,
+            isConnected: false,
+            serviceUuid: '0000fff0-0000-1000-8000-00805f9b34fb',
+            characteristicUuid: '0000fff1-0000-1000-8000-00805f9b34fb'
         };
 
         // DOM Elements
@@ -166,58 +161,53 @@
             registerButton: document.getElementById('register-button'),
             showRegister: document.getElementById('show-register'),
             showLogin: document.getElementById('show-login'),
-            peerSetup: document.getElementById('peer-setup'),
-            peerIdInput: document.getElementById('peer-id'),
-            setPeerButton: document.getElementById('set-peer'),
-            generateQrButton: document.getElementById('generate-qr'),
-            scanQrButton: document.getElementById('scan-qr'),
-            qrCode: document.getElementById('qr-code'),
+            scanBluetoothButton: document.getElementById('scan-bluetooth'),
+            makeDiscoverableButton: document.getElementById('make-discoverable'),
+            bluetoothDevices: document.getElementById('bluetooth-devices'),
+            connectedDevices: document.getElementById('connected-devices'),
             messagesContainer: document.getElementById('messages-container'),
             messageInput: document.getElementById('message-input'),
             sendButton: document.getElementById('send-button'),
             mediaButton: document.getElementById('media-button'),
             mediaInput: document.getElementById('media-input'),
-            connectionStatus: document.getElementById('connection-status'),
-            videoContainer: document.getElementById('video-container'),
-            videoElement: document.getElementById('video-element'),
-            qrCanvas: document.getElementById('qr-canvas'),
-            closeScanner: document.getElementById('close-scanner')
+            connectionStatus: document.getElementById('connection-status')
         };
 
         // Local Storage Keys
         const STORAGE_KEYS = {
-            USERS: 'webMessengerUsers',
-            MESSAGES: 'webMessengerMessages',
-            CURRENT_USER: 'webMessengerCurrentUser',
-            PEER_ID: 'webMessengerPeerId'
+            USERS: 'bluetoothMessengerUsers',
+            MESSAGES: 'bluetoothMessengerMessages',
+            CURRENT_USER: 'bluetoothMessengerCurrentUser'
         };
 
         // Initialize the app
         function initApp() {
             // Check if there's a logged-in user
             const currentUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-            const peerId = localStorage.getItem(STORAGE_KEYS.PEER_ID);
             
             if (currentUser) {
                 appState.currentUser = currentUser;
                 elements.authSection.classList.add('hidden');
                 elements.mainSection.classList.remove('hidden');
-                
-                if (peerId) {
-                    appState.peerId = peerId;
-                    elements.peerIdInput.value = peerId;
-                    setupPeerConnection();
-                }
-                
                 loadMessages();
             } else {
                 // Show first-time instructions
                 setTimeout(() => {
-                    alert('Welcome to Secure Web Messenger!\n\nINSTRUCTIONS:\n1. Register or login with your credentials\n2. Set a unique Peer ID for your device\n3. Generate QR code to share your connection details\n4. Scan QR codes from other devices to connect\n5. Start messaging securely!');
+                    alert('Welcome to Bluetooth Web Messenger!\n\nINSTRUCTIONS:\n1. Register or login with your credentials\n2. Click "Scan for Devices" to find nearby Bluetooth devices\n3. Click "Make Discoverable" to allow others to find your device\n4. Connect to devices to start messaging securely!');
                 }, 500);
             }
             
             setupEventListeners();
+            checkBluetoothAvailability();
+        }
+
+        // Check if Bluetooth is available
+        function checkBluetoothAvailability() {
+            if (!navigator.bluetooth) {
+                alert('Web Bluetooth API is not available in this browser. Please use Chrome or Edge on desktop or Android.');
+                elements.scanBluetoothButton.disabled = true;
+                elements.makeDiscoverableButton.disabled = true;
+            }
         }
 
         // Set up event listeners
@@ -236,11 +226,9 @@
             elements.loginButton.addEventListener('click', handleLogin);
             elements.registerButton.addEventListener('click', handleRegister);
             
-            // Peer setup events
-            elements.setPeerButton.addEventListener('click', setPeerId);
-            elements.generateQrButton.addEventListener('click', generateQrCode);
-            elements.scanQrButton.addEventListener('click', startQrScanner);
-            elements.closeScanner.addEventListener('click', stopQrScanner);
+            // Bluetooth events
+            elements.scanBluetoothButton.addEventListener('click', scanForDevices);
+            elements.makeDiscoverableButton.addEventListener('click', makeDiscoverable);
             
             // Message events
             elements.sendButton.addEventListener('click', sendMessage);
@@ -314,41 +302,201 @@
             elements.authSection.classList.add('hidden');
             elements.mainSection.classList.remove('hidden');
             
-            // Check if we have a peer ID
-            const peerId = localStorage.getItem(STORAGE_KEYS.PEER_ID);
-            if (peerId) {
-                appState.peerId = peerId;
-                elements.peerIdInput.value = peerId;
-                setupPeerConnection();
-            }
-            
             loadMessages();
         }
 
-        // Set peer ID
-        function setPeerId() {
-            const peerId = elements.peerIdInput.value.trim();
-            
-            if (!peerId) {
-                alert('Please enter a peer ID');
+        // Scan for Bluetooth devices
+        async function scanForDevices() {
+            if (!navigator.bluetooth) {
+                alert('Web Bluetooth API is not available in this browser.');
                 return;
             }
             
-            appState.peerId = peerId;
-            localStorage.setItem(STORAGE_KEYS.PEER_ID, peerId);
-            
-            setupPeerConnection();
-            alert(`Peer ID set to: ${peerId}`);
+            try {
+                elements.scanBluetoothButton.disabled = true;
+                elements.scanBluetoothButton.textContent = 'Scanning...';
+                
+                // Request a Bluetooth device
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [appState.serviceUuid]
+                });
+                
+                // Connect to the GATT Server
+                const server = await device.gatt.connect();
+                
+                // Get the service
+                const service = await server.getPrimaryService(appState.serviceUuid);
+                
+                // Get the characteristic
+                const characteristic = await service.getCharacteristic(appState.characteristicUuid);
+                
+                // Start notifications
+                await characteristic.startNotifications();
+                
+                // Add event listener for incoming data
+                characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+                
+                // Store the connection
+                appState.connectedDevices.set(device.id, {
+                    device,
+                    server,
+                    service,
+                    characteristic
+                });
+                
+                // Update UI
+                updateConnectedDevicesList();
+                updateConnectionStatus(true);
+                
+                // Simulate receiving a welcome message
+                simulateIncomingMessage({
+                    id: Date.now(),
+                    sender: device.name || 'Bluetooth Device',
+                    text: `Connected to ${device.name || 'Bluetooth Device'}`,
+                    timestamp: new Date().toISOString(),
+                    type: 'text'
+                });
+                
+            } catch (error) {
+                console.error('Bluetooth error:', error);
+                alert('Error connecting to Bluetooth device: ' + error.message);
+            } finally {
+                elements.scanBluetoothButton.disabled = false;
+                elements.scanBluetoothButton.textContent = 'Scan for Devices';
+            }
         }
 
-        // Setup peer connection (simulated for this demo)
-        function setupPeerConnection() {
-            // In a real implementation, this would set up WebRTC connections
-            updateConnectionStatus(true);
+        // Make device discoverable
+        async function makeDiscoverable() {
+            if (!navigator.bluetooth) {
+                alert('Web Bluetooth API is not available in this browser.');
+                return;
+            }
+            
+            try {
+                // This is a simplified implementation
+                // In a real app, you would advertise your device
+                alert('Your device is now discoverable to nearby Bluetooth devices. Other users can now find and connect to your device.');
+                
+                // Simulate being discovered (this would be handled by the Bluetooth API)
+                simulateDeviceDiscovery();
+                
+            } catch (error) {
+                console.error('Bluetooth error:', error);
+                alert('Error making device discoverable: ' + error.message);
+            }
+        }
+
+        // Simulate device discovery (for demo purposes)
+        function simulateDeviceDiscovery() {
+            // In a real implementation, this would be handled by the Bluetooth API
+            // For demo purposes, we'll simulate finding a device
+            setTimeout(() => {
+                const simulatedDevices = [
+                    { id: 'device-1', name: 'Phone User' },
+                    { id: 'device-2', name: 'Tablet User' },
+                    { id: 'device-3', name: 'Laptop User' }
+                ];
+                
+                updateBluetoothDevicesList(simulatedDevices);
+            }, 2000);
+        }
+
+        // Update Bluetooth devices list
+        function updateBluetoothDevicesList(devices) {
+            if (devices.length === 0) {
+                elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">No devices found.</p>';
+                return;
+            }
+            
+            elements.bluetoothDevices.innerHTML = '';
+            devices.forEach(device => {
+                const deviceElement = document.createElement('div');
+                deviceElement.className = 'bluetooth-device p-2 border-b';
+                deviceElement.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span>${device.name}</span>
+                        <button class="connect-device bg-blue-500 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded" data-id="${device.id}">Connect</button>
+                    </div>
+                `;
+                elements.bluetoothDevices.appendChild(deviceElement);
+                
+                // Add event listener to connect button
+                deviceElement.querySelector('.connect-device').addEventListener('click', () => {
+                    connectToDevice(device);
+                });
+            });
+        }
+
+        // Connect to a device (simulated for demo)
+        function connectToDevice(device) {
+            // In a real implementation, this would connect via Bluetooth
+            // For demo purposes, we'll simulate a connection
+            alert(`Connecting to ${device.name}...`);
+            
+            // Simulate connection process
+            setTimeout(() => {
+                appState.connectedDevices.set(device.id, {
+                    device,
+                    name: device.name
+                });
+                
+                updateConnectedDevicesList();
+                updateConnectionStatus(true);
+                
+                // Simulate receiving a welcome message
+                simulateIncomingMessage({
+                    id: Date.now(),
+                    sender: device.name,
+                    text: `Connected to ${device.name}`,
+                    timestamp: new Date().toISOString(),
+                    type: 'text'
+                });
+            }, 1500);
+        }
+
+        // Update connected devices list
+        function updateConnectedDevicesList() {
+            if (appState.connectedDevices.size === 0) {
+                elements.connectedDevices.innerHTML = '<p class="text-gray-500 text-center py-4">No devices connected.</p>';
+                return;
+            }
+            
+            elements.connectedDevices.innerHTML = '';
+            appState.connectedDevices.forEach((device, id) => {
+                const deviceElement = document.createElement('div');
+                deviceElement.className = 'connected-device p-2 border-b';
+                deviceElement.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="connection-status connected"></span>
+                        <span>${device.name || device.device.name}</span>
+                    </div>
+                `;
+                elements.connectedDevices.appendChild(deviceElement);
+            });
+        }
+
+        // Handle incoming data from Bluetooth
+        function handleIncomingData(event) {
+            // In a real implementation, this would decode the incoming data
+            // For demo purposes, we'll simulate receiving a message
+            const value = event.target.value;
+            const decoder = new TextDecoder();
+            const message = decoder.decode(value);
+            
+            // Parse the message (assuming it's JSON)
+            try {
+                const parsedMessage = JSON.parse(message);
+                simulateIncomingMessage(parsedMessage);
+            } catch (error) {
+                console.error('Error parsing incoming message:', error);
+            }
         }
 
         // Update connection status UI
         function updateConnectionStatus(connected) {
+            appState.isConnected = connected;
             if (connected) {
                 elements.connectionStatus.textContent = 'Connected';
                 elements.connectionStatus.classList.remove('bg-red-500');
@@ -358,133 +506,6 @@
                 elements.connectionStatus.classList.remove('bg-green-500');
                 elements.connectionStatus.classList.add('bg-red-500');
             }
-        }
-
-        // Generate QR code for peer connection - FIXED VERSION
-        function generateQrCode() {
-            if (!appState.peerId) {
-                alert('Please set your Peer ID first');
-                return;
-            }
-            
-            // Create connection data to share
-            const connectionData = {
-                peerId: appState.peerId,
-                timestamp: Date.now(),
-                type: 'webMessengerConnection'
-            };
-            
-            // Convert to JSON string
-            const connectionString = JSON.stringify(connectionData);
-            
-            // Clear previous QR code
-            elements.qrCode.innerHTML = '';
-            
-            // Generate QR code with proper error handling
-            try {
-                QRCode.toDataURL(connectionString, {
-                    width: 200,
-                    margin: 1,
-                    color: {
-                        dark: '#000000',
-                        light: '#ffffff'
-                    }
-                }, function(error, url) {
-                    if (error) {
-                        console.error('QR code generation error:', error);
-                        alert('Failed to generate QR code: ' + error.message);
-                        return;
-                    }
-                    
-                    const img = document.createElement('img');
-                    img.src = url;
-                    img.alt = "Peer Connection QR Code";
-                    elements.qrCode.appendChild(img);
-                    elements.qrCode.classList.remove('hidden');
-                });
-            } catch (error) {
-                console.error('QR code generation error:', error);
-                alert('Failed to generate QR code: ' + error.message);
-            }
-        }
-
-        // Start QR code scanner
-        function startQrScanner() {
-            elements.videoContainer.style.display = 'block';
-            
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                .then(function(stream) {
-                    elements.videoElement.srcObject = stream;
-                    elements.videoElement.setAttribute('playsinline', true);
-                    elements.videoElement.play();
-                    requestAnimationFrame(tick);
-                })
-                .catch(function(error) {
-                    console.error('Error accessing camera:', error);
-                    alert('Cannot access camera: ' + error.message);
-                    stopQrScanner();
-                });
-        }
-
-        // Stop QR code scanner
-        function stopQrScanner() {
-            elements.videoContainer.style.display = 'none';
-            const stream = elements.videoElement.srcObject;
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                elements.videoElement.srcObject = null;
-            }
-        }
-
-        // Scanner tick function
-        function tick() {
-            if (elements.videoElement.readyState === elements.videoElement.HAVE_ENOUGH_DATA) {
-                elements.qrCanvas.height = elements.videoElement.videoHeight;
-                elements.qrCanvas.width = elements.videoElement.videoWidth;
-                
-                const context = elements.qrCanvas.getContext('2d');
-                context.drawImage(elements.videoElement, 0, 0, elements.qrCanvas.width, elements.qrCanvas.height);
-                
-                const imageData = context.getImageData(0, 0, elements.qrCanvas.width, elements.qrCanvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                
-                if (code) {
-                    try {
-                        const connectionData = JSON.parse(code.data);
-                        if (connectionData.type === 'webMessengerConnection') {
-                            handleScannedConnectionData(connectionData);
-                            stopQrScanner();
-                            return;
-                        }
-                    } catch (e) {
-                        console.error('Error parsing QR code data:', e);
-                    }
-                }
-            }
-            
-            requestAnimationFrame(tick);
-        }
-
-        // Handle scanned connection data
-        function handleScannedConnectionData(connectionData) {
-            if (connectionData.peerId === appState.peerId) {
-                alert('Cannot connect to yourself');
-                return;
-            }
-            
-            // In a real implementation, this would initiate a WebRTC connection
-            alert(`Connecting to peer: ${connectionData.peerId}`);
-            appState.connectedPeers.add(connectionData.peerId);
-            updateConnectionStatus(true);
-            
-            // Simulate receiving a welcome message
-            simulateIncomingMessage({
-                id: Date.now(),
-                sender: connectionData.peerId,
-                text: `Connected with ${appState.peerId}`,
-                timestamp: new Date().toISOString(),
-                type: 'text'
-            });
         }
 
         // Encrypt message
@@ -508,14 +529,14 @@
             const messageText = elements.messageInput.value.trim();
             if (!messageText) return;
             
-            if (!appState.connectedPeers.size) {
-                alert('Not connected to any peers. Please scan a QR code to connect.');
+            if (appState.connectedDevices.size === 0) {
+                alert('Not connected to any devices. Please connect to a Bluetooth device first.');
                 return;
             }
             
             const message = {
                 id: Date.now(),
-                sender: appState.peerId,
+                sender: appState.currentUser,
                 text: messageText,
                 timestamp: new Date().toISOString(),
                 type: 'text'
@@ -524,13 +545,27 @@
             // Encrypt message
             const encryptedMessage = encryptMessage(messageText);
             
-            // In a real implementation, this would send via WebRTC data channel
+            // In a real implementation, this would send via Bluetooth
             // For this demo, we'll just store it locally and simulate sending
+            sendViaBluetooth(message);
             saveMessage(message);
             displayMessage(message);
             
             // Clear input
             elements.messageInput.value = '';
+        }
+
+        // Send message via Bluetooth (simulated for demo)
+        function sendViaBluetooth(message) {
+            // In a real implementation, this would send data via the Bluetooth characteristic
+            // For demo purposes, we'll just log it
+            console.log('Sending via Bluetooth:', message);
+            
+            // Simulate sending to all connected devices
+            appState.connectedDevices.forEach((device, id) => {
+                // This would actually use device.characteristic.writeValue() in a real implementation
+                console.log(`Sent to ${device.name || device.device.name}:`, message);
+            });
         }
 
         // Handle media upload
@@ -551,15 +586,16 @@
             reader.onload = function(e) {
                 const message = {
                     id: Date.now(),
-                    sender: appState.peerId,
+                    sender: appState.currentUser,
                     text: isImage ? 'Sent an image' : 'Sent a video',
                     media: e.target.result,
                     timestamp: new Date().toISOString(),
                     type: isImage ? 'image' : 'video'
                 };
                 
-                // In a real implementation, this would send via WebRTC data channel
+                // In a real implementation, this would send via Bluetooth
                 // For this demo, we'll just store it locally and simulate sending
+                sendViaBluetooth(message);
                 saveMessage(message);
                 displayMessage(message);
                 
@@ -592,16 +628,16 @@
             const messageEl = document.createElement('div');
             messageEl.classList.add('mb-4');
             
-            const isOwnMessage = message.sender === appState.peerId;
+            const isOwnMessage = message.sender === appState.currentUser;
             
             if (message.type === 'text') {
-                const decryptedText = decryptMessage(message.text);
+                const decryptedText = isOwnMessage ? message.text : decryptMessage(message.text);
                 
                 messageEl.innerHTML = `
                     <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'}">
                         <div class="chat-bubble-${isOwnMessage ? 'sent' : 'received'} bg-${isOwnMessage ? 'blue-500' : 'gray-200'} text-${isOwnMessage ? 'white' : 'gray-800'} px-4 py-2">
                             <p class="text-sm">${decryptedText}</p>
-                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)}</span>
+                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)} • ${message.sender}</span>
                         </div>
                     </div>
                 `;
@@ -615,7 +651,7 @@
                                 ${message.type === 'video' ? 'controls' : ''}
                             >
                             <p class="text-sm mt-1 text-gray-600">${message.text}</p>
-                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)}</span>
+                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)} • ${message.sender}</span>
                         </div>
                     </div>
                 `;
@@ -633,6 +669,11 @@
 
         // Simulate incoming message (for demo purposes)
         function simulateIncomingMessage(message) {
+            // For demo purposes, we'll encrypt the message if it's text
+            if (message.type === 'text') {
+                message.text = encryptMessage(message.text);
+            }
+            
             saveMessage(message);
             displayMessage(message);
         }
