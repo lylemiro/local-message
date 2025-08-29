@@ -124,6 +124,12 @@
             color: #6B7280;
             margin-top: 0.25rem;
         }
+        .scan-options {
+            background-color: #F3F4F6;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -218,6 +224,22 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                             <li>GitHub Pages: Use custom domain with HTTPS</li>
                             <li>Firebase Hosting: Free SSL certificate</li>
                         </ol>
+                    </div>
+                </div>
+                
+                <div class="scan-options">
+                    <h3 class="font-medium mb-2">Scan Options:</h3>
+                    <div class="flex items-center mb-2">
+                        <input type="radio" id="scan-all" name="scan-type" value="all" checked class="mr-2">
+                        <label for="scan-all" class="text-sm">Scan for all devices</label>
+                    </div>
+                    <div class="flex items-center mb-2">
+                        <input type="radio" id="scan-by-name" name="scan-type" value="name" class="mr-2">
+                        <label for="scan-by-name" class="text-sm">Scan for devices with names</label>
+                    </div>
+                    <div class="flex items-center mb-2">
+                        <input type="radio" id="scan-by-service" name="scan-type" value="service" class="mr-2">
+                        <label for="scan-by-service" class="text-sm">Scan for specific services</label>
                     </div>
                 </div>
                 
@@ -324,7 +346,10 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             bluetoothInfo: document.getElementById('bluetooth-info'),
             bluetoothStatus: document.getElementById('bluetooth-status'),
             permissionsHelp: document.getElementById('permissions-help'),
-            deviceSearch: document.getElementById('device-search')
+            deviceSearch: document.getElementById('device-search'),
+            scanAll: document.getElementById('scan-all'),
+            scanByName: document.getElementById('scan-by-name'),
+            scanByService: document.getElementById('scan-by-service')
         };
 
         // Local Storage Keys
@@ -583,14 +608,33 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     // Show scanning status
                     elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">Scanning for devices...</p>';
                     
-                    // Request device with name prefix filters for better discovery
-                    const device = await navigator.bluetooth.requestDevice({
-                        filters: [
-                            { namePrefix: '' } // Empty prefix to find all devices with names
-                        ],
-                        optionalServices: ['battery_service', 'device_information'],
-                        acceptAllDevices: false // We want to filter by name
-                    });
+                    // Determine scan options based on user selection
+                    let options = {};
+                    
+                    if (elements.scanByName.checked) {
+                        // Scan for devices with names (using acceptAllDevices as namePrefix requires non-empty string)
+                        options = {
+                            acceptAllDevices: true,
+                            optionalServices: ['battery_service', 'device_information']
+                        };
+                    } else if (elements.scanByService.checked) {
+                        // Scan for specific services
+                        options = {
+                            filters: [
+                                { services: ['battery_service'] }
+                            ],
+                            optionalServices: ['device_information']
+                        };
+                    } else {
+                        // Scan for all devices (default)
+                        options = {
+                            acceptAllDevices: true,
+                            optionalServices: ['battery_service', 'device_information']
+                        };
+                    }
+                    
+                    // Request device
+                    const device = await navigator.bluetooth.requestDevice(options);
                     
                     console.log('Device found: ', device.name);
                     
@@ -663,7 +707,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                         <div class="flex items-center">
                             <span class="device-icon">${icon}</span>
                             <div>
-                                <div>${device.name}</div>
+                                <div>${device.name || 'Unknown Device'}</div>
                                 <div class="device-services">ID: ${device.id}</div>
                             </div>
                             ${isConnected ? '<span class="connection-status connected ml-2"></span>' : ''}
@@ -756,8 +800,8 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     // Simulate receiving a welcome message
                     simulateIncomingMessage({
                         id: Date.now(),
-                        sender: device.name,
-                        text: `Connected to ${device.name}`,
+                        sender: device.name || 'Bluetooth Device',
+                        text: `Connected to ${device.name || 'Bluetooth Device'}`,
                         timestamp: new Date().toISOString(),
                         type: 'text'
                     });
@@ -847,7 +891,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     <div class="flex items-center">
                         <span class="connection-status connected"></span>
                         <span class="device-icon">${icon}</span>
-                        <span>${device.name}</span>
+                        <span>${device.name || 'Unknown Device'}</span>
                         <button class="ml-auto disconnect-device text-red-500 hover:text-red-700 text-xs font-bold py-1 px-2" data-id="${device.id}">Disconnect</button>
                     </div>
                 `;
@@ -885,7 +929,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             simulateIncomingMessage({
                 id: Date.now(),
                 sender: 'System',
-                text: `Disconnected from ${device.name}`,
+                text: `Disconnected from ${device.name || 'Bluetooth Device'}`,
                 timestamp: new Date().toISOString(),
                 type: 'text'
             });
