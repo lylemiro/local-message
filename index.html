@@ -104,6 +104,26 @@
             background-color: #3B82F6;
             color: white;
         }
+        .search-box {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 0.5rem;
+            color: #6B7280;
+        }
+        .device-rssi {
+            font-size: 0.75rem;
+            color: #6B7280;
+            margin-left: 0.5rem;
+        }
+        .device-services {
+            font-size: 0.75rem;
+            color: #6B7280;
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -219,6 +239,12 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                         </div>
                     </div>
                 </div>
+
+                <div class="search-box">
+                    <div class="search-icon">🔍</div>
+                    <input type="text" id="device-search" placeholder="Search for devices by name..." class="pl-10 shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                </div>
+
                 <div class="mb-4">
                     <h3 class="font-medium mb-2">Available Devices:</h3>
                     <div id="bluetooth-devices" class="border rounded p-2">
@@ -268,15 +294,10 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             isConnected: false,
             bluetoothSupported: false,
             bluetoothBlockedByPolicy: false,
-            usingSimulation: false,
-            simulatedDevices: [
-                { id: 'device-1', name: 'Phone User', type: 'phone' },
-                { id: 'device-2', name: 'Tablet User', type: 'tablet' },
-                { id: 'device-3', name: 'Laptop User', type: 'laptop' },
-                { id: 'device-4', name: 'Smartwatch', type: 'watch' }
-            ],
+            discoveredDevices: new Map(),
             connectionAttempts: new Map(),
-            maxConnectionAttempts: 3
+            maxConnectionAttempts: 3,
+            isScanning: false
         };
 
         // DOM Elements
@@ -302,7 +323,8 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             connectionStatus: document.getElementById('connection-status'),
             bluetoothInfo: document.getElementById('bluetooth-info'),
             bluetoothStatus: document.getElementById('bluetooth-status'),
-            permissionsHelp: document.getElementById('permissions-help')
+            permissionsHelp: document.getElementById('permissions-help'),
+            deviceSearch: document.getElementById('device-search')
         };
 
         // Local Storage Keys
@@ -413,6 +435,9 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             elements.makeDiscoverableButton.addEventListener('click', makeDiscoverable);
             elements.testBluetoothButton.addEventListener('click', testBluetooth);
             
+            // Search event
+            elements.deviceSearch.addEventListener('input', filterDevices);
+            
             // Tab buttons
             document.querySelectorAll('.tab-button').forEach(button => {
                 button.addEventListener('click', () => {
@@ -433,6 +458,24 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             // Media events
             elements.mediaButton.addEventListener('click', () => elements.mediaInput.click());
             elements.mediaInput.addEventListener('change', handleMediaUpload);
+        }
+
+        // Filter devices based on search input
+        function filterDevices() {
+            const searchTerm = elements.deviceSearch.value.toLowerCase();
+            const devices = Array.from(appState.discoveredDevices.values());
+            
+            if (devices.length === 0) {
+                elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">No devices found. Click "Scan for Devices" to search.</p>';
+                return;
+            }
+            
+            const filteredDevices = devices.filter(device => 
+                device.name.toLowerCase().includes(searchTerm) || 
+                (device.id && device.id.toLowerCase().includes(searchTerm))
+            );
+            
+            updateBluetoothDevicesList(filteredDevices);
         }
 
         // Test Bluetooth functionality
@@ -523,13 +566,30 @@ local-ssl-proxy --source 3001 --target 3000</pre>
             if (appState.bluetoothSupported && !appState.bluetoothBlockedByPolicy) {
                 // Real Web Bluetooth API implementation
                 try {
+                    if (appState.isScanning) {
+                        alert('Already scanning for devices. Please wait.');
+                        return;
+                    }
+                    
+                    appState.isScanning = true;
                     elements.scanBluetoothButton.disabled = true;
                     elements.scanBluetoothButton.innerHTML = '<span class="connecting"></span><span class="ml-2">Scanning...</span>';
                     
                     console.log('Requesting Bluetooth Device...');
+                    
+                    // Clear previous devices
+                    appState.discoveredDevices.clear();
+                    
+                    // Show scanning status
+                    elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">Scanning for devices...</p>';
+                    
+                    // Request device with name prefix filters for better discovery
                     const device = await navigator.bluetooth.requestDevice({
-                        acceptAllDevices: true,
-                        optionalServices: ['battery_service']
+                        filters: [
+                            { namePrefix: '' } // Empty prefix to find all devices with names
+                        ],
+                        optionalServices: ['battery_service', 'device_information'],
+                        acceptAllDevices: false // We want to filter by name
                     });
                     
                     console.log('Device found: ', device.name);
@@ -541,8 +601,11 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                         device: device
                     };
                     
+                    // Add to discovered devices
+                    appState.discoveredDevices.set(device.id, deviceObject);
+                    
                     // Add to available devices list
-                    updateBluetoothDevicesList([deviceObject]);
+                    updateBluetoothDevicesList(Array.from(appState.discoveredDevices.values()));
                     
                 } catch (error) {
                     console.error('Bluetooth error:', error);
@@ -553,6 +616,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                         alert('Error with Bluetooth: ' + error.message);
                     }
                 } finally {
+                    appState.isScanning = false;
                     elements.scanBluetoothButton.disabled = false;
                     elements.scanBluetoothButton.innerHTML = '<span>🔍</span><span class="ml-2">Scan for Devices</span>';
                 }
@@ -575,7 +639,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
         // Update Bluetooth devices list
         function updateBluetoothDevicesList(devices) {
             if (devices.length === 0) {
-                elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">No devices found.</p>';
+                elements.bluetoothDevices.innerHTML = '<p class="text-gray-500 text-center py-4">No devices found. Click "Scan for Devices" to search.</p>';
                 return;
             }
             
@@ -598,7 +662,10 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     <div class="flex justify-between items-center">
                         <div class="flex items-center">
                             <span class="device-icon">${icon}</span>
-                            <span>${device.name}</span>
+                            <div>
+                                <div>${device.name}</div>
+                                <div class="device-services">ID: ${device.id}</div>
+                            </div>
                             ${isConnected ? '<span class="connection-status connected ml-2"></span>' : ''}
                         </div>
                         <button class="connect-device bg-blue-500 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded" data-id="${device.id}">
@@ -649,14 +716,26 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     
                     console.log('Getting Service...');
                     const server = device.device.gatt;
-                    const service = await server.getPrimaryService('battery_service');
                     
-                    console.log('Getting Characteristic...');
-                    const characteristic = await service.getCharacteristic('battery_level');
+                    // Try to get device information if available
+                    try {
+                        const deviceInfoService = await server.getPrimaryService('device_information');
+                        const characteristics = await deviceInfoService.getCharacteristics();
+                        
+                        console.log('Device information characteristics:', characteristics);
+                    } catch (e) {
+                        console.log('Device information service not available');
+                    }
                     
-                    console.log('Reading Battery Level...');
-                    const value = await characteristic.readValue();
-                    console.log('Battery percentage: ' + value.getUint8(0) + '%');
+                    // Try to get battery service if available
+                    try {
+                        const batteryService = await server.getPrimaryService('battery_service');
+                        const batteryLevel = await batteryService.getCharacteristic('battery_level');
+                        const value = await batteryLevel.readValue();
+                        console.log('Battery percentage: ' + value.getUint8(0) + '%');
+                    } catch (e) {
+                        console.log('Battery service not available');
+                    }
                     
                     // Reset connection attempts on success
                     appState.connectionAttempts.set(device.id, 0);
@@ -672,7 +751,7 @@ local-ssl-proxy --source 3001 --target 3000</pre>
                     
                     updateConnectedDevicesList();
                     updateConnectionStatus(true);
-                    updateBluetoothDevicesList([device]);
+                    updateBluetoothDevicesList(Array.from(appState.discoveredDevices.values()));
                     
                     // Simulate receiving a welcome message
                     simulateIncomingMessage({
