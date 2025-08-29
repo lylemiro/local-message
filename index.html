@@ -41,6 +41,29 @@
         }
         .connecting {
             background-color: #F59E0B;
+            animation: pulse 1.5s infinite;
+        }
+        .device-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 8px;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .info-banner {
+            background-color: #EFF6FF;
+            border-left: 4px solid #3B82F6;
+        }
+        .simulated-badge {
+            background-color: #F59E0B;
+            color: white;
+            font-size: 0.75rem;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.25rem;
+            margin-left: 0.5rem;
         }
     </style>
 </head>
@@ -90,11 +113,22 @@
             <!-- Bluetooth Setup -->
             <div id="bluetooth-setup" class="p-6 border-b">
                 <h2 class="text-xl font-semibold mb-4">Bluetooth Connection</h2>
+                
+                <div id="bluetooth-info" class="mb-4 p-4 info-banner rounded-lg">
+                    <p class="text-blue-700 text-sm" id="bluetooth-status">Checking Bluetooth support...</p>
+                </div>
+                
                 <div class="flex flex-wrap items-center mb-4">
                     <div class="w-full mb-4">
                         <div class="flex space-x-2">
-                            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="scan-bluetooth">Scan for Devices</button>
-                            <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" id="make-discoverable">Make Discoverable</button>
+                            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center" id="scan-bluetooth">
+                                <span>🔍</span>
+                                <span class="ml-2">Scan for Devices</span>
+                            </button>
+                            <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center" id="make-discoverable">
+                                <span>📱</span>
+                                <span class="ml-2">Make Discoverable</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -142,13 +176,17 @@
         // App State
         const appState = {
             currentUser: null,
-            bluetoothServer: null,
-            bluetoothCharacteristic: null,
             connectedDevices: new Map(),
             encryptionKey: null,
             isConnected: false,
-            serviceUuid: '0000fff0-0000-1000-8000-00805f9b34fb',
-            characteristicUuid: '0000fff1-0000-1000-8000-00805f9b34fb'
+            bluetoothSupported: false,
+            usingSimulation: false,
+            simulatedDevices: [
+                { id: 'device-1', name: 'Phone User', type: 'phone' },
+                { id: 'device-2', name: 'Tablet User', type: 'tablet' },
+                { id: 'device-3', name: 'Laptop User', type: 'laptop' },
+                { id: 'device-4', name: 'Smartwatch', type: 'watch' }
+            ]
         };
 
         // DOM Elements
@@ -170,14 +208,17 @@
             sendButton: document.getElementById('send-button'),
             mediaButton: document.getElementById('media-button'),
             mediaInput: document.getElementById('media-input'),
-            connectionStatus: document.getElementById('connection-status')
+            connectionStatus: document.getElementById('connection-status'),
+            bluetoothInfo: document.getElementById('bluetooth-info'),
+            bluetoothStatus: document.getElementById('bluetooth-status')
         };
 
         // Local Storage Keys
         const STORAGE_KEYS = {
             USERS: 'bluetoothMessengerUsers',
             MESSAGES: 'bluetoothMessengerMessages',
-            CURRENT_USER: 'bluetoothMessengerCurrentUser'
+            CURRENT_USER: 'bluetoothMessengerCurrentUser',
+            DEVICES: 'bluetoothMessengerDevices'
         };
 
         // Initialize the app
@@ -190,6 +231,23 @@
                 elements.authSection.classList.add('hidden');
                 elements.mainSection.classList.remove('hidden');
                 loadMessages();
+                
+                // Load previously connected devices
+                const savedDevices = localStorage.getItem(STORAGE_KEYS.DEVICES);
+                if (savedDevices) {
+                    try {
+                        const devices = JSON.parse(savedDevices);
+                        devices.forEach(device => {
+                            appState.connectedDevices.set(device.id, device);
+                        });
+                        updateConnectedDevicesList();
+                        if (appState.connectedDevices.size > 0) {
+                            updateConnectionStatus(true);
+                        }
+                    } catch (e) {
+                        console.error('Error loading devices:', e);
+                    }
+                }
             } else {
                 // Show first-time instructions
                 setTimeout(() => {
@@ -203,10 +261,19 @@
 
         // Check if Bluetooth is available
         function checkBluetoothAvailability() {
-            if (!navigator.bluetooth) {
-                alert('Web Bluetooth API is not available in this browser. Please use Chrome or Edge on desktop or Android.');
-                elements.scanBluetoothButton.disabled = true;
-                elements.makeDiscoverableButton.disabled = true;
+            appState.bluetoothSupported = !!navigator.bluetooth;
+            
+            if (appState.bluetoothSupported) {
+                elements.bluetoothStatus.textContent = 'Web Bluetooth API is supported in your browser.';
+                elements.bluetoothInfo.className = 'mb-4 p-4 bg-green-50 border-l-4 border-green-500 rounded-lg';
+            } else {
+                appState.usingSimulation = true;
+                elements.bluetoothStatus.textContent = 'Web Bluetooth API is not available. Using simulated Bluetooth functionality.';
+                elements.bluetoothInfo.className = 'mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-500 rounded-lg';
+                
+                // Add simulation badges to buttons
+                elements.scanBluetoothButton.innerHTML += '<span class="simulated-badge">Simulated</span>';
+                elements.makeDiscoverableButton.innerHTML += '<span class="simulated-badge">Simulated</span>';
             }
         }
 
@@ -307,100 +374,95 @@
 
         // Scan for Bluetooth devices
         async function scanForDevices() {
-            if (!navigator.bluetooth) {
-                alert('Web Bluetooth API is not available in this browser.');
-                return;
-            }
-            
-            try {
+            if (appState.bluetoothSupported) {
+                // Real Web Bluetooth API implementation
+                try {
+                    elements.scanBluetoothButton.disabled = true;
+                    elements.scanBluetoothButton.innerHTML = '<span class="connecting"></span><span class="ml-2">Scanning...</span>';
+                    
+                    console.log('Requesting Bluetooth Device...');
+                    const device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: ['battery_service']
+                    });
+                    
+                    console.log('> Name:             ' + device.name);
+                    console.log('> ID:               ' + device.id);
+                    console.log('> Connected:        ' + device.gatt.connected);
+                    
+                    // Connect to device
+                    elements.scanBluetoothButton.innerHTML = '<span class="connecting"></span><span class="ml-2">Connecting...</span>';
+                    
+                    const deviceObject = {
+                        id: device.id,
+                        name: device.name || 'Unknown Device',
+                        type: 'bluetooth',
+                        device: device
+                    };
+                    
+                    connectToDevice(deviceObject);
+                    
+                } catch (error) {
+                    console.error('Bluetooth error:', error);
+                    alert('Error with Bluetooth: ' + error.message);
+                } finally {
+                    elements.scanBluetoothButton.disabled = false;
+                    elements.scanBluetoothButton.innerHTML = '<span>🔍</span><span class="ml-2">Scan for Devices</span>';
+                }
+            } else {
+                // Simulated Bluetooth scanning
                 elements.scanBluetoothButton.disabled = true;
-                elements.scanBluetoothButton.textContent = 'Scanning...';
+                elements.scanBluetoothButton.innerHTML = '<span class="connecting"></span><span class="ml-2">Scanning...</span>';
                 
-                // Request a Bluetooth device
-                const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: [appState.serviceUuid]
-                });
-                
-                // Connect to the GATT Server
-                const server = await device.gatt.connect();
-                
-                // Get the service
-                const service = await server.getPrimaryService(appState.serviceUuid);
-                
-                // Get the characteristic
-                const characteristic = await service.getCharacteristic(appState.characteristicUuid);
-                
-                // Start notifications
-                await characteristic.startNotifications();
-                
-                // Add event listener for incoming data
-                characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-                
-                // Store the connection
-                appState.connectedDevices.set(device.id, {
-                    device,
-                    server,
-                    service,
-                    characteristic
-                });
-                
-                // Update UI
-                updateConnectedDevicesList();
-                updateConnectionStatus(true);
-                
-                // Simulate receiving a welcome message
-                simulateIncomingMessage({
-                    id: Date.now(),
-                    sender: device.name || 'Bluetooth Device',
-                    text: `Connected to ${device.name || 'Bluetooth Device'}`,
-                    timestamp: new Date().toISOString(),
-                    type: 'text'
-                });
-                
-            } catch (error) {
-                console.error('Bluetooth error:', error);
-                alert('Error connecting to Bluetooth device: ' + error.message);
-            } finally {
-                elements.scanBluetoothButton.disabled = false;
-                elements.scanBluetoothButton.textContent = 'Scan for Devices';
+                // Simulate scanning delay
+                setTimeout(() => {
+                    updateBluetoothDevicesList(appState.simulatedDevices);
+                    elements.scanBluetoothButton.disabled = false;
+                    elements.scanBluetoothButton.innerHTML = '<span>🔍</span><span class="ml-2">Scan for Devices</span><span class="simulated-badge">Simulated</span>';
+                }, 2000);
             }
         }
 
         // Make device discoverable
         async function makeDiscoverable() {
-            if (!navigator.bluetooth) {
-                alert('Web Bluetooth API is not available in this browser.');
-                return;
-            }
-            
-            try {
-                // This is a simplified implementation
-                // In a real app, you would advertise your device
-                alert('Your device is now discoverable to nearby Bluetooth devices. Other users can now find and connect to your device.');
+            if (appState.bluetoothSupported) {
+                // In a real implementation, you would use the Web Bluetooth API
+                // to make the device discoverable, but this isn't directly supported
+                alert('Your device is now discoverable to nearby Bluetooth devices.');
+            } else {
+                // Simulated discoverable mode
+                elements.makeDiscoverableButton.disabled = true;
+                elements.makeDiscoverableButton.innerHTML = '<span class="connecting"></span><span class="ml-2">Discoverable...</span>';
                 
-                // Simulate being discovered (this would be handled by the Bluetooth API)
-                simulateDeviceDiscovery();
-                
-            } catch (error) {
-                console.error('Bluetooth error:', error);
-                alert('Error making device discoverable: ' + error.message);
+                // Simulate being discoverable
+                setTimeout(() => {
+                    alert('Your device is now discoverable to nearby Bluetooth devices. Other users can now find and connect to your device.');
+                    elements.makeDiscoverableButton.disabled = false;
+                    elements.makeDiscoverableButton.innerHTML = '<span>📱</span><span class="ml-2">Make Discoverable</span><span class="simulated-badge">Simulated</span>';
+                    
+                    // Simulate another device discovering us
+                    simulateDeviceDiscovery();
+                }, 1500);
             }
         }
 
-        // Simulate device discovery (for demo purposes)
+        // Simulate device discovery
         function simulateDeviceDiscovery() {
             // In a real implementation, this would be handled by the Bluetooth API
-            // For demo purposes, we'll simulate finding a device
+            // For demo purposes, we'll simulate finding a device after a delay
             setTimeout(() => {
-                const simulatedDevices = [
-                    { id: 'device-1', name: 'Phone User' },
-                    { id: 'device-2', name: 'Tablet User' },
-                    { id: 'device-3', name: 'Laptop User' }
-                ];
+                const newDevice = {
+                    id: 'discovered-device',
+                    name: 'Discovered Phone',
+                    type: 'phone'
+                };
                 
-                updateBluetoothDevicesList(simulatedDevices);
-            }, 2000);
+                // Add to simulated devices if not already there
+                if (!appState.simulatedDevices.some(d => d.id === newDevice.id)) {
+                    appState.simulatedDevices.push(newDevice);
+                    updateBluetoothDevicesList(appState.simulatedDevices);
+                }
+            }, 3000);
         }
 
         // Update Bluetooth devices list
@@ -414,9 +476,20 @@
             devices.forEach(device => {
                 const deviceElement = document.createElement('div');
                 deviceElement.className = 'bluetooth-device p-2 border-b';
+                
+                // Get device icon based on type
+                let icon = '📱'; // default phone icon
+                if (device.type === 'tablet') icon = '📟';
+                if (device.type === 'laptop') icon = '💻';
+                if (device.type === 'watch') icon = '⌚';
+                if (device.type === 'bluetooth') icon = '📶';
+                
                 deviceElement.innerHTML = `
                     <div class="flex justify-between items-center">
-                        <span>${device.name}</span>
+                        <div class="flex items-center">
+                            <span class="device-icon">${icon}</span>
+                            <span>${device.name}</span>
+                        </div>
                         <button class="connect-device bg-blue-500 hover:bg-blue-700 text-white text-xs font-bold py-1 px-2 rounded" data-id="${device.id}">Connect</button>
                     </div>
                 `;
@@ -429,31 +502,99 @@
             });
         }
 
-        // Connect to a device (simulated for demo)
+        // Connect to a device
         function connectToDevice(device) {
-            // In a real implementation, this would connect via Bluetooth
-            // For demo purposes, we'll simulate a connection
-            alert(`Connecting to ${device.name}...`);
-            
-            // Simulate connection process
-            setTimeout(() => {
-                appState.connectedDevices.set(device.id, {
-                    device,
-                    name: device.name
+            if (appState.bluetoothSupported && device.device) {
+                // Real Web Bluetooth API implementation
+                elements.bluetoothDevices.querySelectorAll('.connect-device').forEach(btn => {
+                    btn.disabled = true;
+                    btn.textContent = 'Connecting...';
                 });
                 
-                updateConnectedDevicesList();
-                updateConnectionStatus(true);
-                
-                // Simulate receiving a welcome message
-                simulateIncomingMessage({
-                    id: Date.now(),
-                    sender: device.name,
-                    text: `Connected to ${device.name}`,
-                    timestamp: new Date().toISOString(),
-                    type: 'text'
+                device.device.gatt.connect()
+                .then(server => {
+                    console.log('Getting Service...');
+                    return server.getPrimaryService('battery_service');
+                })
+                .then(service => {
+                    console.log('Getting Characteristic...');
+                    return service.getCharacteristic('battery_level');
+                })
+                .then(characteristic => {
+                    console.log('Reading Battery Level...');
+                    return characteristic.readValue();
+                })
+                .then(value => {
+                    console.log('Battery percentage: ' + value.getUint8(0) + '%');
+                    
+                    appState.connectedDevices.set(device.id, device);
+                    
+                    // Save connected devices to localStorage
+                    const devicesArray = Array.from(appState.connectedDevices.values());
+                    localStorage.setItem(STORAGE_KEYS.DEVICES, JSON.stringify(devicesArray));
+                    
+                    updateConnectedDevicesList();
+                    updateConnectionStatus(true);
+                    
+                    // Simulate receiving a welcome message
+                    simulateIncomingMessage({
+                        id: Date.now(),
+                        sender: device.name,
+                        text: `Connected to ${device.name}`,
+                        timestamp: new Date().toISOString(),
+                        type: 'text'
+                    });
+                    
+                    // Reset connect buttons
+                    elements.bluetoothDevices.querySelectorAll('.connect-device').forEach(btn => {
+                        btn.disabled = false;
+                        btn.textContent = 'Connect';
+                    });
+                })
+                .catch(error => {
+                    console.error('Connection error:', error);
+                    alert('Error connecting to device: ' + error.message);
+                    
+                    // Reset connect buttons
+                    elements.bluetoothDevices.querySelectorAll('.connect-device').forEach(btn => {
+                        btn.disabled = false;
+                        btn.textContent = 'Connect';
+                    });
                 });
-            }, 1500);
+            } else {
+                // Simulated connection
+                elements.bluetoothDevices.querySelectorAll('.connect-device').forEach(btn => {
+                    btn.disabled = true;
+                    btn.textContent = 'Connecting...';
+                });
+                
+                // Simulate connection process
+                setTimeout(() => {
+                    appState.connectedDevices.set(device.id, device);
+                    
+                    // Save connected devices to localStorage
+                    const devicesArray = Array.from(appState.connectedDevices.values());
+                    localStorage.setItem(STORAGE_KEYS.DEVICES, JSON.stringify(devicesArray));
+                    
+                    updateConnectedDevicesList();
+                    updateConnectionStatus(true);
+                    
+                    // Simulate receiving a welcome message
+                    simulateIncomingMessage({
+                        id: Date.now(),
+                        sender: device.name,
+                        text: `Connected to ${device.name}`,
+                        timestamp: new Date().toISOString(),
+                        type: 'text'
+                    });
+                    
+                    // Reset connect buttons
+                    elements.bluetoothDevices.querySelectorAll('.connect-device').forEach(btn => {
+                        btn.disabled = false;
+                        btn.textContent = 'Connect';
+                    });
+                }, 1500);
+            }
         }
 
         // Update connected devices list
@@ -465,33 +606,64 @@
             
             elements.connectedDevices.innerHTML = '';
             appState.connectedDevices.forEach((device, id) => {
+                // Get device icon based on type
+                let icon = '📱'; // default phone icon
+                if (device.type === 'tablet') icon = '📟';
+                if (device.type === 'laptop') icon = '💻';
+                if (device.type === 'watch') icon = '⌚';
+                if (device.type === 'bluetooth') icon = '📶';
+                
                 const deviceElement = document.createElement('div');
                 deviceElement.className = 'connected-device p-2 border-b';
                 deviceElement.innerHTML = `
                     <div class="flex items-center">
                         <span class="connection-status connected"></span>
-                        <span>${device.name || device.device.name}</span>
+                        <span class="device-icon">${icon}</span>
+                        <span>${device.name}</span>
+                        <button class="ml-auto disconnect-device text-red-500 hover:text-red-700 text-xs font-bold py-1 px-2" data-id="${device.id}">Disconnect</button>
                     </div>
                 `;
                 elements.connectedDevices.appendChild(deviceElement);
+                
+                // Add event listener to disconnect button
+                deviceElement.querySelector('.disconnect-device').addEventListener('click', () => {
+                    disconnectDevice(device.id);
+                });
             });
         }
 
-        // Handle incoming data from Bluetooth
-        function handleIncomingData(event) {
-            // In a real implementation, this would decode the incoming data
-            // For demo purposes, we'll simulate receiving a message
-            const value = event.target.value;
-            const decoder = new TextDecoder();
-            const message = decoder.decode(value);
+        // Disconnect from a device
+        function disconnectDevice(deviceId) {
+            const device = appState.connectedDevices.get(deviceId);
             
-            // Parse the message (assuming it's JSON)
-            try {
-                const parsedMessage = JSON.parse(message);
-                simulateIncomingMessage(parsedMessage);
-            } catch (error) {
-                console.error('Error parsing incoming message:', error);
+            if (appState.bluetoothSupported && device.device) {
+                // Real Web Bluetooth API disconnection
+                if (device.device.gatt.connected) {
+                    device.device.gatt.disconnect();
+                    console.log('Bluetooth Device disconnected');
+                }
             }
+            
+            appState.connectedDevices.delete(deviceId);
+            
+            // Update localStorage
+            const devicesArray = Array.from(appState.connectedDevices.values());
+            localStorage.setItem(STORAGE_KEYS.DEVICES, JSON.stringify(devicesArray));
+            
+            updateConnectedDevicesList();
+            
+            if (appState.connectedDevices.size === 0) {
+                updateConnectionStatus(false);
+            }
+            
+            // Simulate disconnection message
+            simulateIncomingMessage({
+                id: Date.now(),
+                sender: 'System',
+                text: `Disconnected from ${device.name}`,
+                timestamp: new Date().toISOString(),
+                type: 'text'
+            });
         }
 
         // Update connection status UI
@@ -547,7 +719,7 @@
             
             // In a real implementation, this would send via Bluetooth
             // For this demo, we'll just store it locally and simulate sending
-            sendViaBluetooth(message);
+            simulateSendViaBluetooth(message);
             saveMessage(message);
             displayMessage(message);
             
@@ -555,16 +727,28 @@
             elements.messageInput.value = '';
         }
 
-        // Send message via Bluetooth (simulated for demo)
-        function sendViaBluetooth(message) {
-            // In a real implementation, this would send data via the Bluetooth characteristic
-            // For demo purposes, we'll just log it
+        // Simulate sending via Bluetooth
+        function simulateSendViaBluetooth(message) {
+            // In a real implementation, this would send data via Bluetooth
+            // For demo purposes, we'll just log it and simulate responses
             console.log('Sending via Bluetooth:', message);
             
             // Simulate sending to all connected devices
             appState.connectedDevices.forEach((device, id) => {
-                // This would actually use device.characteristic.writeValue() in a real implementation
-                console.log(`Sent to ${device.name || device.device.name}:`, message);
+                console.log(`Sent to ${device.name}:`, message);
+                
+                // Simulate responses from devices after a delay
+                if (Math.random() > 0.7) {
+                    setTimeout(() => {
+                        simulateIncomingMessage({
+                            id: Date.now() + Math.random(),
+                            sender: device.name,
+                            text: 'Received your message!',
+                            timestamp: new Date().toISOString(),
+                            type: 'text'
+                        });
+                    }, 1000 + Math.random() * 2000);
+                }
             });
         }
 
@@ -595,7 +779,7 @@
                 
                 // In a real implementation, this would send via Bluetooth
                 // For this demo, we'll just store it locally and simulate sending
-                sendViaBluetooth(message);
+                simulateSendViaBluetooth(message);
                 saveMessage(message);
                 displayMessage(message);
                 
@@ -667,10 +851,10 @@
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
 
-        // Simulate incoming message (for demo purposes)
+        // Simulate incoming message
         function simulateIncomingMessage(message) {
             // For demo purposes, we'll encrypt the message if it's text
-            if (message.type === 'text') {
+            if (message.type === 'text' && message.sender !== 'System') {
                 message.text = encryptMessage(message.text);
             }
             
