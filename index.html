@@ -36,6 +36,14 @@
         #qr-canvas {
             display: none;
         }
+        .qr-code-container {
+            display: flex;
+            justify-content: center;
+            padding: 1rem;
+            background: white;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -99,7 +107,7 @@
                         </div>
                     </div>
                 </div>
-                <div id="qr-code" class="hidden mt-4 flex justify-center"></div>
+                <div id="qr-code" class="hidden mt-4 qr-code-container"></div>
             </div>
 
             <!-- Chat Section -->
@@ -352,7 +360,7 @@
             }
         }
 
-        // Generate QR code for peer connection
+        // Generate QR code for peer connection - FIXED VERSION
         function generateQrCode() {
             if (!appState.peerId) {
                 alert('Please set your Peer ID first');
@@ -372,22 +380,32 @@
             // Clear previous QR code
             elements.qrCode.innerHTML = '';
             
-            // Generate QR code
-            QRCode.toCanvas(elements.qrCode, connectionString, {
-                width: 200,
-                margin: 1,
-                color: {
-                    dark: '#000000',
-                    light: '#ffffff'
-                }
-            }, function(error) {
-                if (error) {
-                    console.error('QR code generation error:', error);
-                    alert('Failed to generate QR code');
-                }
-            });
-            
-            elements.qrCode.classList.remove('hidden');
+            // Generate QR code with proper error handling
+            try {
+                QRCode.toDataURL(connectionString, {
+                    width: 200,
+                    margin: 1,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                }, function(error, url) {
+                    if (error) {
+                        console.error('QR code generation error:', error);
+                        alert('Failed to generate QR code: ' + error.message);
+                        return;
+                    }
+                    
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.alt = "Peer Connection QR Code";
+                    elements.qrCode.appendChild(img);
+                    elements.qrCode.classList.remove('hidden');
+                });
+            } catch (error) {
+                console.error('QR code generation error:', error);
+                alert('Failed to generate QR code: ' + error.message);
+            }
         }
 
         // Start QR code scanner
