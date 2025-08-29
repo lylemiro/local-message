@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Web Messenger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        .chat-bubble-sent {
+            border-radius: 1.125rem 1.125rem 0 1.125rem;
+            max-width: 66.666667%;
+        }
+        .chat-bubble-received {
+            border-radius: 1.125rem 1.125rem 1.125rem 0;
+            max-width: 66.666667%;
+        }
+        #video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 50;
+            display: none;
+        }
+        #video-element {
+            width: 100%;
+            max-width: 500px;
+            margin: 2rem auto;
+            display: block;
+        }
+        #qr-canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- Auth Section -->
+        <div id="auth-section" class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
+            <h1 class="text-2xl font-bold text-center mb-6">Secure Messenger</h1>
+            <div id="login-form">
+                <h2 class="text-xl font-semibold mb-4">Login</h2>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="login-username">Username</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="login-username" type="text" placeholder="Username">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="login-password">Password</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="login-password" type="password" placeholder="Password">
+                </div>
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" id="login-button">Sign In</button>
+                    <button class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800" id="show-register">Register</button>
+                </div>
+            </div>
+            <div id="register-form" class="hidden">
+                <h2 class="text-xl font-semibold mb-4">Register</h2>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="register-username">Username</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="register-username" type="text" placeholder="Username">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="register-password">Password</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="register-password" type="password" placeholder="Password">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="register-confirm">Confirm Password</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline" id="register-confirm" type="password" placeholder="Confirm Password">
+                </div>
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" id="register-button">Register</button>
+                    <button class="inline-block align-baseline font-bold text-sm text-blue-500 hover:text-blue-800" id="show-login">Back to Login</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main App Section -->
+        <div id="main-section" class="hidden max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden">
+            <!-- Peer Setup -->
+            <div id="peer-setup" class="p-6 border-b">
+                <h2 class="text-xl font-semibold mb-4">Peer Setup</h2>
+                <div class="flex flex-wrap items-center mb-4">
+                    <div class="w-full md:w-1/2 mb-4 md:mb-0">
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="peer-id">Your Peer ID</label>
+                        <div class="flex">
+                            <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="peer-id" type="text" placeholder="Enter a unique ID">
+                            <button class="ml-2 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" id="set-peer">Set ID</button>
+                        </div>
+                    </div>
+                    <div class="w-full md:w-1/2 md:pl-4">
+                        <div class="flex space-x-2">
+                            <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" id="generate-qr">Generate QR</button>
+                            <button class="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded" id="scan-qr">Scan QR</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="qr-code" class="hidden mt-4 flex justify-center"></div>
+            </div>
+
+            <!-- Chat Section -->
+            <div class="flex flex-col h-96">
+                <!-- Chat Header -->
+                <div class="bg-gray-200 px-4 py-2 flex justify-between items-center">
+                    <h3 class="font-semibold">Group Chat</h3>
+                    <span id="connection-status" class="bg-red-500 text-white px-2 py-1 rounded-full text-xs">Disconnected</span>
+                </div>
+
+                <!-- Messages Container -->
+                <div id="messages-container" class="flex-1 overflow-y-auto p-4 bg-gray-50">
+                    <!-- Messages will be appended here -->
+                </div>
+
+                <!-- Message Input -->
+                <div class="border-t p-4 bg-white">
+                    <div class="flex">
+                        <input type="text" id="message-input" placeholder="Type your message..." class="flex-1 border rounded-l py-2 px-4 focus:outline-none">
+                        <input type="file" id="media-input" accept="image/*,video/*" class="hidden">
+                        <button id="media-button" class="bg-gray-200 hover:bg-gray-300 px-3 border-y">📎</button>
+                        <button id="send-button" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-r">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Scanner -->
+    <div id="video-container">
+        <video id="video-element"></video>
+        <canvas id="qr-canvas" class="hidden"></canvas>
+        <div class="text-center mt-4">
+            <button id="close-scanner" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Close Scanner</button>
+        </div>
+    </div>
+
+    <script>
+        // App State
+        const appState = {
+            currentUser: null,
+            peerId: null,
+            connections: {},
+            dataChannel: null,
+            connectedPeers: new Set(),
+            encryptionKey: null
+        };
+
+        // DOM Elements
+        const elements = {
+            authSection: document.getElementById('auth-section'),
+            mainSection: document.getElementById('main-section'),
+            loginForm: document.getElementById('login-form'),
+            registerForm: document.getElementById('register-form'),
+            loginButton: document.getElementById('login-button'),
+            registerButton: document.getElementById('register-button'),
+            showRegister: document.getElementById('show-register'),
+            showLogin: document.getElementById('show-login'),
+            peerSetup: document.getElementById('peer-setup'),
+            peerIdInput: document.getElementById('peer-id'),
+            setPeerButton: document.getElementById('set-peer'),
+            generateQrButton: document.getElementById('generate-qr'),
+            scanQrButton: document.getElementById('scan-qr'),
+            qrCode: document.getElementById('qr-code'),
+            messagesContainer: document.getElementById('messages-container'),
+            messageInput: document.getElementById('message-input'),
+            sendButton: document.getElementById('send-button'),
+            mediaButton: document.getElementById('media-button'),
+            mediaInput: document.getElementById('media-input'),
+            connectionStatus: document.getElementById('connection-status'),
+            videoContainer: document.getElementById('video-container'),
+            videoElement: document.getElementById('video-element'),
+            qrCanvas: document.getElementById('qr-canvas'),
+            closeScanner: document.getElementById('close-scanner')
+        };
+
+        // Local Storage Keys
+        const STORAGE_KEYS = {
+            USERS: 'webMessengerUsers',
+            MESSAGES: 'webMessengerMessages',
+            CURRENT_USER: 'webMessengerCurrentUser',
+            PEER_ID: 'webMessengerPeerId'
+        };
+
+        // Initialize the app
+        function initApp() {
+            // Check if there's a logged-in user
+            const currentUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+            const peerId = localStorage.getItem(STORAGE_KEYS.PEER_ID);
+            
+            if (currentUser) {
+                appState.currentUser = currentUser;
+                elements.authSection.classList.add('hidden');
+                elements.mainSection.classList.remove('hidden');
+                
+                if (peerId) {
+                    appState.peerId = peerId;
+                    elements.peerIdInput.value = peerId;
+                    setupPeerConnection();
+                }
+                
+                loadMessages();
+            } else {
+                // Show first-time instructions
+                setTimeout(() => {
+                    alert('Welcome to Secure Web Messenger!\n\nINSTRUCTIONS:\n1. Register or login with your credentials\n2. Set a unique Peer ID for your device\n3. Generate QR code to share your connection details\n4. Scan QR codes from other devices to connect\n5. Start messaging securely!');
+                }, 500);
+            }
+            
+            setupEventListeners();
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Auth events
+            elements.showRegister.addEventListener('click', () => {
+                elements.loginForm.classList.add('hidden');
+                elements.registerForm.classList.remove('hidden');
+            });
+            
+            elements.showLogin.addEventListener('click', () => {
+                elements.registerForm.classList.add('hidden');
+                elements.loginForm.classList.remove('hidden');
+            });
+            
+            elements.loginButton.addEventListener('click', handleLogin);
+            elements.registerButton.addEventListener('click', handleRegister);
+            
+            // Peer setup events
+            elements.setPeerButton.addEventListener('click', setPeerId);
+            elements.generateQrButton.addEventListener('click', generateQrCode);
+            elements.scanQrButton.addEventListener('click', startQrScanner);
+            elements.closeScanner.addEventListener('click', stopQrScanner);
+            
+            // Message events
+            elements.sendButton.addEventListener('click', sendMessage);
+            elements.messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+            
+            // Media events
+            elements.mediaButton.addEventListener('click', () => elements.mediaInput.click());
+            elements.mediaInput.addEventListener('change', handleMediaUpload);
+        }
+
+        // Handle user registration
+        function handleRegister() {
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+            const confirm = document.getElementById('register-confirm').value;
+            
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+            
+            if (password !== confirm) {
+                alert('Passwords do not match');
+                return;
+            }
+            
+            // Get existing users or initialize empty object
+            const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '{}');
+            
+            if (users[username]) {
+                alert('Username already exists');
+                return;
+            }
+            
+            // Store user (in a real app, you'd hash the password)
+            users[username] = { password, createdAt: new Date().toISOString() };
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+            
+            alert('Registration successful! Please login.');
+            elements.registerForm.classList.add('hidden');
+            elements.loginForm.classList.remove('hidden');
+        }
+
+        // Handle user login
+        function handleLogin() {
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+            
+            // Get existing users
+            const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '{}');
+            
+            if (!users[username] || users[username].password !== password) {
+                alert('Invalid username or password');
+                return;
+            }
+            
+            // Login successful
+            appState.currentUser = username;
+            localStorage.setItem(STORAGE_KEYS.CURRENT_USER, username);
+            
+            // Derive encryption key from password (simplified for demo)
+            appState.encryptionKey = CryptoJS.SHA256(password).toString();
+            
+            elements.authSection.classList.add('hidden');
+            elements.mainSection.classList.remove('hidden');
+            
+            // Check if we have a peer ID
+            const peerId = localStorage.getItem(STORAGE_KEYS.PEER_ID);
+            if (peerId) {
+                appState.peerId = peerId;
+                elements.peerIdInput.value = peerId;
+                setupPeerConnection();
+            }
+            
+            loadMessages();
+        }
+
+        // Set peer ID
+        function setPeerId() {
+            const peerId = elements.peerIdInput.value.trim();
+            
+            if (!peerId) {
+                alert('Please enter a peer ID');
+                return;
+            }
+            
+            appState.peerId = peerId;
+            localStorage.setItem(STORAGE_KEYS.PEER_ID, peerId);
+            
+            setupPeerConnection();
+            alert(`Peer ID set to: ${peerId}`);
+        }
+
+        // Setup peer connection (simulated for this demo)
+        function setupPeerConnection() {
+            // In a real implementation, this would set up WebRTC connections
+            updateConnectionStatus(true);
+        }
+
+        // Update connection status UI
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                elements.connectionStatus.textContent = 'Connected';
+                elements.connectionStatus.classList.remove('bg-red-500');
+                elements.connectionStatus.classList.add('bg-green-500');
+            } else {
+                elements.connectionStatus.textContent = 'Disconnected';
+                elements.connectionStatus.classList.remove('bg-green-500');
+                elements.connectionStatus.classList.add('bg-red-500');
+            }
+        }
+
+        // Generate QR code for peer connection
+        function generateQrCode() {
+            if (!appState.peerId) {
+                alert('Please set your Peer ID first');
+                return;
+            }
+            
+            // Create connection data to share
+            const connectionData = {
+                peerId: appState.peerId,
+                timestamp: Date.now(),
+                type: 'webMessengerConnection'
+            };
+            
+            // Convert to JSON string
+            const connectionString = JSON.stringify(connectionData);
+            
+            // Clear previous QR code
+            elements.qrCode.innerHTML = '';
+            
+            // Generate QR code
+            QRCode.toCanvas(elements.qrCode, connectionString, {
+                width: 200,
+                margin: 1,
+                color: {
+                    dark: '#000000',
+                    light: '#ffffff'
+                }
+            }, function(error) {
+                if (error) {
+                    console.error('QR code generation error:', error);
+                    alert('Failed to generate QR code');
+                }
+            });
+            
+            elements.qrCode.classList.remove('hidden');
+        }
+
+        // Start QR code scanner
+        function startQrScanner() {
+            elements.videoContainer.style.display = 'block';
+            
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(function(stream) {
+                    elements.videoElement.srcObject = stream;
+                    elements.videoElement.setAttribute('playsinline', true);
+                    elements.videoElement.play();
+                    requestAnimationFrame(tick);
+                })
+                .catch(function(error) {
+                    console.error('Error accessing camera:', error);
+                    alert('Cannot access camera: ' + error.message);
+                    stopQrScanner();
+                });
+        }
+
+        // Stop QR code scanner
+        function stopQrScanner() {
+            elements.videoContainer.style.display = 'none';
+            const stream = elements.videoElement.srcObject;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                elements.videoElement.srcObject = null;
+            }
+        }
+
+        // Scanner tick function
+        function tick() {
+            if (elements.videoElement.readyState === elements.videoElement.HAVE_ENOUGH_DATA) {
+                elements.qrCanvas.height = elements.videoElement.videoHeight;
+                elements.qrCanvas.width = elements.videoElement.videoWidth;
+                
+                const context = elements.qrCanvas.getContext('2d');
+                context.drawImage(elements.videoElement, 0, 0, elements.qrCanvas.width, elements.qrCanvas.height);
+                
+                const imageData = context.getImageData(0, 0, elements.qrCanvas.width, elements.qrCanvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    try {
+                        const connectionData = JSON.parse(code.data);
+                        if (connectionData.type === 'webMessengerConnection') {
+                            handleScannedConnectionData(connectionData);
+                            stopQrScanner();
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing QR code data:', e);
+                    }
+                }
+            }
+            
+            requestAnimationFrame(tick);
+        }
+
+        // Handle scanned connection data
+        function handleScannedConnectionData(connectionData) {
+            if (connectionData.peerId === appState.peerId) {
+                alert('Cannot connect to yourself');
+                return;
+            }
+            
+            // In a real implementation, this would initiate a WebRTC connection
+            alert(`Connecting to peer: ${connectionData.peerId}`);
+            appState.connectedPeers.add(connectionData.peerId);
+            updateConnectionStatus(true);
+            
+            // Simulate receiving a welcome message
+            simulateIncomingMessage({
+                id: Date.now(),
+                sender: connectionData.peerId,
+                text: `Connected with ${appState.peerId}`,
+                timestamp: new Date().toISOString(),
+                type: 'text'
+            });
+        }
+
+        // Encrypt message
+        function encryptMessage(text) {
+            return CryptoJS.AES.encrypt(text, appState.encryptionKey).toString();
+        }
+
+        // Decrypt message
+        function decryptMessage(ciphertext) {
+            try {
+                const bytes = CryptoJS.AES.decrypt(ciphertext, appState.encryptionKey);
+                return bytes.toString(CryptoJS.enc.Utf8);
+            } catch (e) {
+                console.error('Decryption error:', e);
+                return '[Unable to decrypt message]';
+            }
+        }
+
+        // Send message
+        function sendMessage() {
+            const messageText = elements.messageInput.value.trim();
+            if (!messageText) return;
+            
+            if (!appState.connectedPeers.size) {
+                alert('Not connected to any peers. Please scan a QR code to connect.');
+                return;
+            }
+            
+            const message = {
+                id: Date.now(),
+                sender: appState.peerId,
+                text: messageText,
+                timestamp: new Date().toISOString(),
+                type: 'text'
+            };
+            
+            // Encrypt message
+            const encryptedMessage = encryptMessage(messageText);
+            
+            // In a real implementation, this would send via WebRTC data channel
+            // For this demo, we'll just store it locally and simulate sending
+            saveMessage(message);
+            displayMessage(message);
+            
+            // Clear input
+            elements.messageInput.value = '';
+        }
+
+        // Handle media upload
+        function handleMediaUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Check if file is image or video
+            const isImage = file.type.startsWith('image/');
+            const isVideo = file.type.startsWith('video/');
+            
+            if (!isImage && !isVideo) {
+                alert('Please select an image or video file');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const message = {
+                    id: Date.now(),
+                    sender: appState.peerId,
+                    text: isImage ? 'Sent an image' : 'Sent a video',
+                    media: e.target.result,
+                    timestamp: new Date().toISOString(),
+                    type: isImage ? 'image' : 'video'
+                };
+                
+                // In a real implementation, this would send via WebRTC data channel
+                // For this demo, we'll just store it locally and simulate sending
+                saveMessage(message);
+                displayMessage(message);
+                
+                // Reset file input
+                elements.mediaInput.value = '';
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        // Save message to localStorage
+        function saveMessage(message) {
+            const messages = JSON.parse(localStorage.getItem(STORAGE_KEYS.MESSAGES) || '[]');
+            messages.push(message);
+            localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+        }
+
+        // Load messages from localStorage
+        function loadMessages() {
+            const messages = JSON.parse(localStorage.getItem(STORAGE_KEYS.MESSAGES) || '[]');
+            elements.messagesContainer.innerHTML = '';
+            
+            messages.forEach(message => {
+                displayMessage(message);
+            });
+        }
+
+        // Display message in chat
+        function displayMessage(message) {
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('mb-4');
+            
+            const isOwnMessage = message.sender === appState.peerId;
+            
+            if (message.type === 'text') {
+                const decryptedText = decryptMessage(message.text);
+                
+                messageEl.innerHTML = `
+                    <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'}">
+                        <div class="chat-bubble-${isOwnMessage ? 'sent' : 'received'} bg-${isOwnMessage ? 'blue-500' : 'gray-200'} text-${isOwnMessage ? 'white' : 'gray-800'} px-4 py-2">
+                            <p class="text-sm">${decryptedText}</p>
+                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (message.type === 'image' || message.type === 'video') {
+                messageEl.innerHTML = `
+                    <div class="flex ${isOwnMessage ? 'justify-end' : 'justify-start'}">
+                        <div class="max-w-xs">
+                            <${message.type === 'image' ? 'img' : 'video'} 
+                                src="${message.media}" 
+                                class="rounded-lg max-w-full h-auto" 
+                                ${message.type === 'video' ? 'controls' : ''}
+                            >
+                            <p class="text-sm mt-1 text-gray-600">${message.text}</p>
+                            <span class="text-xs opacity-75 block mt-1">${formatTime(message.timestamp)}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            elements.messagesContainer.appendChild(messageEl);
+            elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
+        }
+
+        // Format timestamp
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Simulate incoming message (for demo purposes)
+        function simulateIncomingMessage(message) {
+            saveMessage(message);
+            displayMessage(message);
+        }
+
+        // Initialize the app when the DOM is loaded
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
